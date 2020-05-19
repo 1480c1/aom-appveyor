@@ -1,0 +1,59 @@
+# Maintainer: Christopher Degawa <ccom@randomderp.com>
+
+_realname=aom
+pkgbase=mingw-w64-$_realname
+pkgname="${MINGW_PACKAGE_PREFIX}-$_realname-git"
+pkgver=r29988.1478d8607
+pkgrel=1
+pkgdesc='AV1 codec library (git mingw-w64) + vmaf'
+arch=('any')
+url="https://aomedia.org/"
+license=('BSD')
+replaces=("${MINGW_PACKAGE_PREFIX}-$_realname")
+conflicts=("${MINGW_PACKAGE_PREFIX}-$_realname")
+depends=()
+makedepends=(
+    "${MINGW_PACKAGE_PREFIX}-vmaf-git"
+    "${MINGW_PACKAGE_PREFIX}-cc"
+    "perl"
+    "${MINGW_PACKAGE_PREFIX}-cmake"
+    "${MINGW_PACKAGE_PREFIX}-gcc"
+    "${MINGW_PACKAGE_PREFIX}-yasm"
+    "${MINGW_PACKAGE_PREFIX}-ninja"
+    "${MINGW_PACKAGE_PREFIX}-python")
+source=("git+https://github.com/m-ab-s/aom.git")
+sha256sums=('SKIP')
+validpgpkeys=('B002F08B74A148DAA01F7123A48E86DB0B830498')
+
+pkgver() {
+    printf "r%s.%s" "$(git -C "$srcdir/$_realname" rev-list --count HEAD)" "$(git -C "$srcdir/$_realname" rev-parse --short HEAD)"
+}
+
+prepare() {
+    cat ./*.patch | patch -d "$srcdir/$_realname" -Np1
+}
+
+build() {
+    rm -rf "$srcdir/build-$CARCH"
+    MSYS2_ARG_CONV_EXCL="-DCMAKE_INSTALL_PREFIX=" \
+        ${MINGW_PREFIX}/bin/cmake \
+        -S $_realname \
+        -B "$srcdir/build-$CARCH" \
+        -G Ninja \
+        -DENABLE_CCACHE="$(type ccache > /dev/null && echo ON || echo OFF)" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=${MINGW_PREFIX} \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DENABLE_TESTS=OFF \
+        -DENABLE_EXAMPLES=ON \
+        -DCONFIG_TUNE_VMAF=1 \
+        -DENABLE_DOCS=OFF
+    ${MINGW_PREFIX}/bin/cmake --build "$srcdir/build-$CARCH"
+}
+
+package() {
+    DESTDIR="${pkgdir}" ${MINGW_PREFIX}/bin/cmake --build "$srcdir/build-$CARCH" --target install
+
+    install -Dm644 $srcdir/$_realname/LICENSE ${pkgdir}${MINGW_PREFIX}/share/licenses/$_realname/LICENSE
+    install -Dm644 $srcdir/$_realname/PATENTS ${pkgdir}${MINGW_PREFIX}/share/licenses/$_realname/PATENTS
+}

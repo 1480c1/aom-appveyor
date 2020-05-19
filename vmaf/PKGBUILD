@@ -1,0 +1,45 @@
+# Maintainer: Christopher Degawa <ccom@randomderp.com>
+
+_realname=vmaf
+pkgbase=mingw-w64-$_realname
+pkgname="${MINGW_PACKAGE_PREFIX}-$_realname-git"
+pkgver=r1350.08160410
+pkgrel=1
+pkgdesc='Perceptual video quality assessment based on multi-method fusion (git mingw-w64)'
+arch=('any')
+url="https://github.com/Netflix/vmaf"
+license=('BSD')
+replaces=("${MINGW_PACKAGE_PREFIX}-$_realname")
+conflicts=("${MINGW_PACKAGE_PREFIX}-$_realname")
+depends=()
+makedepends=(
+    "${MINGW_PACKAGE_PREFIX}-meson"
+    "${MINGW_PACKAGE_PREFIX}-cc"
+    "${MINGW_PACKAGE_PREFIX}-ninja"
+    "${MINGW_PACKAGE_PREFIX}-nasm")
+source=("git+https://github.com/Netflix/vmaf.git")
+sha256sums=('SKIP')
+
+pkgver() {
+    printf "r%s.%s" "$(git -C "$srcdir/$_realname" rev-list --count HEAD)" "$(git -C "$srcdir/$_realname" rev-parse --short HEAD)"
+}
+
+build() {
+    rm -rf "$srcdir/build-$CARCH"
+    MSYS2_ARG_CONV_EXCL="--prefix=" \
+    ${MINGW_PREFIX}/bin/meson setup \
+        --prefix="${MINGW_PREFIX}" \
+        --buildtype=release \
+        --default-library=static \
+        -Denable_tests=false \
+        -Denable_docs=false \
+        "$srcdir/build-$CARCH" \
+        $_realname/libvmaf
+    ${MINGW_PREFIX}/bin/meson compile -C "$srcdir/build-$CARCH"
+}
+
+package() {
+    DESTDIR="${pkgdir}" ${MINGW_PREFIX}/bin/meson install -C "$srcdir/build-$CARCH"
+    install -Dm644 $srcdir/$_realname/LICENSE ${pkgdir}${MINGW_PREFIX}/share/licenses/$_realname/LICENSE
+    find "${pkgdir}${MINGW_PREFIX}" -name "libvmaf.pc" -exec sed -i "s|$(cygpath -am "${MINGW_PREFIX}")|${MINGW_PREFIX}|g" {} +
+}

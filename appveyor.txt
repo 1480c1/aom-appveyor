@@ -1,0 +1,48 @@
+version: 1.0.{build}
+image: Visual Studio 2022
+environment:
+  MINGW_ARCH: ucrt64
+  MSYSTEM: UCRT64
+  MSYS2_PATH_TYPE: inherit
+  DEBIAN_FRONTEND: noninteractive
+  APPVEYOR_SAVE_CACHE_ON_ERROR: true
+  LDFLAGS: -pipe -static-libgcc -static-libstdc++
+  CFLAGS: -static -O3 -mthreads -mtune=generic -pipe -D_FILE_OFFSET_BITS=64
+  CXXFLAGS: -static -O3 -mthreads -mtune=generic -pipe -D_FILE_OFFSET_BITS=64
+  CC: ccache gcc
+  CXX: ccache g++
+  CHERE_INVOKING: true
+  CCACHE_DIR: C:\msys64\home\appveyor\.ccache
+
+install:
+  - set "PATH=C:\msys64\ucrt64\bin;C:\msys64\usr\bin;%PATH%"
+  - pwsh: |
+      sed -i 's#.*mingw32.*##
+      s%#color%color%' C:\msys64\etc\pacman.conf
+  # In case of system upgrade
+  - pacman -Syyuu --noconfirm --noprogressbar || cd .
+  - pacman -Suu --noconfirm --noprogressbar
+  - pacman -S --noconfirm --noprogressbar --needed mingw-w64-ucrt-x86_64-ccache vim
+  - pwsh: |
+      echo 's%!ccache%ccache%' 's%CFLAGS\="%&-static -Ofast -mthreads %' 's%CXXFLAGS\="%&-static -Ofast -mthreads %' 's%LDFLAGS\="%&-static-libgcc -static-libstdc++ %' > sed.sed
+      sed -f sed.sed -i C:\msys64\etc\makepkg_mingw.conf
+build_script:
+  - mkdir vmaf-build
+  - cd vmaf-build
+  - wget https://raw.githubusercontent.com/1480c1/aom-appveyor/master/vmaf/PKGBUILD
+  - bash -lc 'makepkg-mingw -si --noconfirm --needed'
+  - cd ..
+  - mkdir aom-build
+  - cd aom-build
+  - wget https://raw.githubusercontent.com/1480c1/aom-appveyor/master/aom/PKGBUILD
+  - bash -lc 'makepkg-mingw -si --noconfirm --needed'
+  - cd ..
+  - ldd C:\msys64\ucrt64\bin\aomenc.exe
+  - mkdir dist
+  - copy C:\msys64\ucrt64\bin\aomenc.exe dist
+artifacts:
+  - path: ./dist
+    name: aom-win64
+cache:
+  - C:\msys64\var\cache\pacman\pkg
+  - C:\msys64\home\appveyor\.ccache
