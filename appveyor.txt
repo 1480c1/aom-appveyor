@@ -1,0 +1,80 @@
+version: 1.0.{build}
+image:
+  - Visual Studio 2019
+  - Ubuntu2004
+environment:
+  MSYSTEM: MINGW64
+  MSYS2_PATH_TYPE: inherit
+  DEBIAN_FRONTEND: noninteractive
+  APPVEYOR_SAVE_CACHE_ON_ERROR: true
+  LDFLAGS: -pipe -static-libgcc -static-libstdc++
+  CFLAGS: -O3 -mtune=generic -pipe -D_FILE_OFFSET_BITS=64
+  CXXFLAGS: -O3 -mtune=generic -pipe -D_FILE_OFFSET_BITS=64
+  CC: ccache gcc
+  CXX: ccache g++
+
+for:
+  - matrix:
+      only:
+        - image: Visual Studio 2019
+    environment:
+      CCACHE_DIR: C:\msys64\home\appveyor\.ccache
+      LDFLAGS: -pipe -static-libgcc -static-libstdc++
+      CFLAGS: -static -O3 -mthreads -mtune=generic -pipe -D_FILE_OFFSET_BITS=64
+      CXXFLAGS: -static -O3 -mthreads -mtune=generic -pipe -D_FILE_OFFSET_BITS=64
+      CHERE_INVOKING: true
+      MINGW_INSTALLS: mingw64
+    install:
+      - set "PATH=C:\msys64\mingw64\bin;C:\msys64\usr\bin;%PATH%"
+      - pwsh: |
+          sed -i 's#.*mingw32.*##
+          s%#color%color%' C:\msys64\etc\pacman.conf
+          echo 's%!ccache%ccache%' 's%-march=x86-64 -mtune=generic -O2 -pipe%& -static -Ofast -mthreads%' 's%^LDFLAGS\="%&-static-libgcc -static-libstdc++ -Wl,--dynamicbase,--high-entropy-va,--nxcompat %' > sed.sed
+          sed -f sed.sed -i C:\msys64\etc\makepkg_mingw64.conf
+      # In case of system upgrade
+      - pacman -Syyuu --noconfirm --noprogressbar || cd .
+      - pacman -Suu --noconfirm --noprogressbar
+      - pacman -S --noconfirm --noprogressbar --needed mingw-w64-x86_64-ccache
+    build_script:
+      - mkdir vmaf-build
+      - cd vmaf-build
+      - wget https://raw.githubusercontent.com/1480c1/aom-appveyor/master/vmaf/PKGBUILD
+      - bash -lc 'makepkg-mingw -si --noconfirm --needed'
+      - cd ..
+      - mkdir aom-build
+      - cd aom-build
+      - wget https://raw.githubusercontent.com/1480c1/aom-appveyor/master/aom/PKGBUILD
+      - bash -lc 'makepkg-mingw -si --noconfirm --needed'
+      - cd ..
+      - ldd C:\msys64\mingw64\bin\aomenc.exe
+      - mkdir dist
+      - copy C:\msys64\mingw64\bin\aomenc.exe dist
+      - pwsh: New-Item -Path dist -Name README.txt -ItemType File -Value "Go to https://github.com/Netflix/vmaf/tree/master/model and grab vmaf_4k_v0.6.1.pkl and vmaf_4k_v0.6.1.pkl.model into the same folder as aomenc.exe for vmaf tune to work."
+    artifacts:
+      - path: ./dist
+        name: aom-win64
+    cache:
+      - C:\msys64\var\cache\pacman\pkg
+      - C:\msys64\home\appveyor\.ccache
+  - matrix:
+      only:
+        - image: Ubuntu2004
+    install:
+      - export CCACHE_DIR=$HOME/.ccache
+      - "[[ ! -d $CCACHE_DIR ]] || sudo chown -R $USER: $CCACHE_DIR"
+      - sudo apt-get update
+      - sudo apt-get install -yy ccache nasm ninja-build meson
+      - git clone https://github.com/Netflix/vmaf.git
+      - meson setup --default-library=static --buildtype=release --prefix=/usr build-vmaf vmaf/libvmaf || { cat build-vmaf/meson-logs/meson-log.txt && exit 1; }
+      - sudo -E ninja -C build-vmaf install
+      - CFLAGS+=" -static" CXXFLAGS+=" -static"  cmake -S . -B build-64bit -G "Unix Makefiles" -DENABLE_CCACHE=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_SHARED_LIBS=off -DENABLE_EXAMPLES=ON -DENABLE_NASM=ON -DCONFIG_TUNE_VMAF=1 -DENABLE_TESTS=OFF -DENABLE_DOCS=OFF
+    build_script:
+      - sudo -E make -C build-64bit -j install
+      - ldd /usr/bin/aomenc || true
+      - mkdir -p dist
+      - cp /usr/bin/aomenc dist
+    artifacts:
+      - path: ./dist
+        name: aom-linux
+    cache:
+      - $HOME/.ccache
